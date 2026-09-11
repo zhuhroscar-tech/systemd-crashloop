@@ -1,8 +1,23 @@
 # systemd-crashloop
 
+[![CI](https://github.com/zhuhroscar-tech/systemd-crashloop/actions/workflows/ci.yml/badge.svg)](https://github.com/zhuhroscar-tech/systemd-crashloop/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/zhuhroscar-tech/systemd-crashloop?include_prereleases&label=release)](https://github.com/zhuhroscar-tech/systemd-crashloop/releases)
+![Linux](https://img.shields.io/badge/platform-Linux-111111?logo=linux)
+
 Classify *why* a systemd service is crash-looping — OOM killed, start-limit
 hit, missing dependency, timeout, a config error, or a plain nonzero exit —
 instead of manually reading `journalctl` output line by line.
+
+## Simple explanation
+
+When a background service on a Linux server keeps crashing and
+restarting in a loop, there are several different possible reasons —
+it ran out of memory, it's missing something it depends on, it's too
+slow to start, its configuration is broken, or it just failed on its
+own. This tool reads the service's logs and status and tells you
+plainly which of these it actually is, instead of you scrolling through
+raw log output trying to figure it out. It's purely diagnostic — it
+never restarts, stops, or edits the service.
 
 ## The problem
 
