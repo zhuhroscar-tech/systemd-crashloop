@@ -7,6 +7,7 @@ import sys
 
 from . import __version__
 from .core import diagnose_unit, list_failed_units, CAUSE_CLEAN_NOT_CRASHING, CAUSE_UNKNOWN
+from .style import print_fields, resolve_style, status_headline
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -30,18 +31,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="How many recent journal lines to inspect per unit (default: 200).",
     )
     p.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+    p.add_argument("--no-color", action="store_true", help="Disable colored output.")
     return p
 
 
-def _print_text(reports) -> None:
+def _print_text(reports, style) -> None:
     for r in reports:
-        print(f"\n{r.unit}: {r.cause}")
+        level = "ok" if r.cause == CAUSE_CLEAN_NOT_CRASHING else "fail"
+        print()
+        print(status_headline(style, level, f"{r.unit}: {r.cause}"))
         print(f"  {r.explanation}")
         if r.state:
-            print(
-                f"  state: active={r.state.active_state} sub={r.state.sub_state} "
-                f"result={r.state.result or '-'} n_restarts={r.state.n_restarts}"
-            )
+            print_fields([
+                ("active", r.state.active_state),
+                ("sub", r.state.sub_state),
+                ("result", r.state.result or "-"),
+                ("n_restarts", r.state.n_restarts),
+            ])
         if r.evidence:
             print("  recent journal lines:")
             for line in r.evidence:
@@ -57,9 +63,10 @@ def main(argv=None) -> int:
     if args.json:
         print(json.dumps([r.to_dict() for r in reports], indent=2))
     else:
+        style = resolve_style(no_color_flag=args.no_color)
         if not reports:
-            print("No failed units found and none were specified.")
-        _print_text(reports)
+            print(status_headline(style, "ok", "No failed units found and none were specified."))
+        _print_text(reports, style)
 
     if not reports:
         return 0
