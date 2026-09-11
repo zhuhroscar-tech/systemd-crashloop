@@ -38,6 +38,8 @@ tool does the root-cause classification automatically.
 
 ## What this does
 
+![systemd-crashloop example output](docs/images/example-output.png)
+
 ```
 $ systemd-crashloop myapp.service
 
