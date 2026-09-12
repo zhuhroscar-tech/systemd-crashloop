@@ -124,6 +124,49 @@ def test_diagnose_unknown_when_nothing_matches():
     assert report.cause == CAUSE_UNKNOWN
 
 
+def test_diagnose_falls_back_to_result_timeout():
+    # `systemctl show`'s Result property is set to "timeout" when a service
+    # fails to signal readiness/stop within its configured timeout, distinct
+    # from any journal text pattern. This fallback branch (core.py's
+    # `elif state.result == "timeout": cause = CAUSE_TIMEOUT`) previously had
+    # zero test coverage -- a regression here would silently misclassify a
+    # timeout as CAUSE_UNKNOWN with nobody noticing.
+    state = _state(result="timeout", exec_main_code="", exec_main_status=None)
+    report = diagnose(state, "no useful pattern here at all")
+    assert report.cause == CAUSE_TIMEOUT
+
+
+def test_diagnose_unit_integration_wires_runner_through(monkeypatch):
+    # diagnose_unit() (the public entry point CLI actually calls) had no
+    # direct test coverage -- only its two halves (get_unit_show +
+    # get_recent_journal) were tested in isolation. A wiring bug (e.g.
+    # passing the wrong runner, or swapping state/journal_text arguments)
+    # would not have been caught by the unit-level tests alone.
+    calls = []
+
+    def fake_runner(cmd, timeout=15):
+        calls.append(cmd)
+        if cmd[:2] == ["systemctl", "show"]:
+            return (
+                "ActiveState=failed\nSubState=failed\nResult=oom-kill\n"
+                "ExecMainStatus=137\nExecMainCode=killed\nNRestarts=5\n"
+                "UnitFileState=enabled\n"
+            )
+        if cmd[0] == "journalctl":
+            return "Sep 10 08:00:00 host kernel: Out of memory: Killed process 1234 (myapp)\n"
+        return ""
+
+    from systemd_crashloop.core import diagnose_unit
+
+    report = diagnose_unit("myapp.service", journal_lines=50, runner=fake_runner)
+    assert report.cause == CAUSE_OOM_KILLED
+    assert report.unit == "myapp.service"
+    # Confirm the journal_lines argument was actually threaded through to
+    # `journalctl -n <journal_lines>`, not silently dropped/hardcoded.
+    journal_cmd = next(c for c in calls if c[0] == "journalctl")
+    assert "50" in journal_cmd
+
+
 def test_diagnose_treats_high_restart_count_as_crash_loop_even_if_not_failed():
     state = _state(active_state="activating", sub_state="auto-restart", result="", n_restarts=10)
     journal = "systemd[1]: myapp.service: Start request repeated too quickly."
