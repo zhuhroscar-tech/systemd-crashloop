@@ -7,6 +7,7 @@ from systemd_crashloop.core import (
     CAUSE_OOM_KILLED,
     CAUSE_START_LIMIT_HIT,
     CAUSE_TIMEOUT,
+    CAUSE_UNIT_NOT_FOUND,
     CAUSE_UNKNOWN,
     UnitState,
     classify_from_journal,
@@ -61,6 +62,53 @@ def test_diagnose_not_crashing_when_active_and_no_restarts():
     state = _state(active_state="active", sub_state="running", result="", n_restarts=0)
     report = diagnose(state, "some normal log output")
     assert report.cause == CAUSE_CLEAN_NOT_CRASHING
+
+
+def test_diagnose_reports_unit_not_found_for_nonexistent_unit():
+    """`systemctl show typo.service` for a unit systemd never loaded does NOT
+    fail or produce empty output -- it returns LoadState=not-found,
+    ActiveState=inactive, SubState=dead, Result="", n_restarts=None. Before
+    this fix that flowed straight past the state_is_empty check into the
+    'not failed, no restarts' branch and was reported as CAUSE_CLEAN_NOT_CRASHING
+    -- false reassurance that a typo'd/uninstalled unit is healthy, exactly
+    the failure mode this tool exists to catch. Must be reported as
+    CAUSE_UNIT_NOT_FOUND instead."""
+    state = _state(
+        active_state="inactive", sub_state="dead", result="",
+        exec_main_status=None, exec_main_code="", n_restarts=None,
+        unit_file_state="", load_state="not-found",
+    )
+    report = diagnose(state, "")
+    assert report.cause == CAUSE_UNIT_NOT_FOUND
+    assert report.cause != CAUSE_CLEAN_NOT_CRASHING
+
+
+def test_diagnose_reports_unit_not_found_for_masked_unit():
+    state = _state(
+        active_state="inactive", sub_state="dead", result="",
+        exec_main_status=None, exec_main_code="", n_restarts=None,
+        unit_file_state="masked", load_state="masked",
+    )
+    report = diagnose(state, "")
+    assert report.cause == CAUSE_UNIT_NOT_FOUND
+
+
+def test_diagnose_unit_via_get_unit_show_with_not_found_unit(monkeypatch):
+    """End-to-end: get_unit_show() parsing systemctl's real LoadState=not-found
+    output must flow through diagnose() as CAUSE_UNIT_NOT_FOUND, not silently
+    as 'not crashing'."""
+    sample = (
+        "LoadState=not-found\nActiveState=inactive\nSubState=dead\nResult=\n"
+        "ExecMainStatus=\nExecMainCode=\nNRestarts=\nUnitFileState=\n"
+    )
+
+    def fake_runner(cmd, timeout=15):
+        return sample
+
+    state = get_unit_show("typo.service", runner=fake_runner)
+    assert state.load_state == "not-found"
+    report = diagnose(state, get_recent_journal("typo.service", runner=lambda cmd, timeout=15: ""))
+    assert report.cause == CAUSE_UNIT_NOT_FOUND
 
 
 def test_diagnose_uses_journal_classification_first():

@@ -6,7 +6,7 @@ import json
 import sys
 
 from . import __version__
-from .core import diagnose_unit, list_failed_units, CAUSE_CLEAN_NOT_CRASHING, CAUSE_UNKNOWN, CAUSE_DIAGNOSTIC_FAILED
+from .core import diagnose_unit, list_failed_units, CAUSE_CLEAN_NOT_CRASHING, CAUSE_UNKNOWN, CAUSE_DIAGNOSTIC_FAILED, CAUSE_UNIT_NOT_FOUND
 from .style import print_fields, resolve_style, status_headline
 
 
@@ -37,7 +37,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _print_text(reports, style) -> None:
     for r in reports:
-        level = "ok" if r.cause == CAUSE_CLEAN_NOT_CRASHING else ("warn" if r.cause == CAUSE_DIAGNOSTIC_FAILED else "fail")
+        level = "ok" if r.cause == CAUSE_CLEAN_NOT_CRASHING else ("warn" if r.cause in (CAUSE_DIAGNOSTIC_FAILED, CAUSE_UNIT_NOT_FOUND) else "fail")
         print()
         print(status_headline(style, level, f"{r.unit}: {r.cause}"))
         print(f"  {r.explanation}")
@@ -71,6 +71,8 @@ def main(argv=None) -> int:
     if not reports:
         return 0
     if any(r.cause == CAUSE_DIAGNOSTIC_FAILED for r in reports):
+        return 3
+    if any(r.cause == CAUSE_UNIT_NOT_FOUND for r in reports):
         return 3
     if any(r.cause == CAUSE_UNKNOWN for r in reports):
         return 1

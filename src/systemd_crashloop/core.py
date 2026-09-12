@@ -42,6 +42,7 @@ CAUSE_NONZERO_EXIT = "nonzero_exit"
 CAUSE_CLEAN_NOT_CRASHING = "not_crashing"
 CAUSE_UNKNOWN = "unknown"
 CAUSE_DIAGNOSTIC_FAILED = "diagnostic_failed"
+CAUSE_UNIT_NOT_FOUND = "unit_not_found"
 
 # Human-readable one-line explanations per cause code.
 CAUSE_EXPLANATIONS = {
@@ -69,6 +70,10 @@ CAUSE_EXPLANATIONS = {
                               "the D-Bus/systemd connection may be unavailable, or "
                               "permission was denied). This is NOT a confirmed "
                               "healthy/not-crashing result.",
+    CAUSE_UNIT_NOT_FOUND: "systemd has no loaded unit by this name (LoadState is "
+                          "'not-found' or 'masked') -- likely a typo in the unit "
+                          "name, or the unit file was removed/never installed. "
+                          "This is NOT a confirmed healthy/not-crashing result.",
 }
 
 
@@ -91,12 +96,13 @@ class UnitState:
     exec_main_code: str = ""  # "exited" | "killed" | "dumped" | ""
     n_restarts: Optional[int] = None
     unit_file_state: str = ""
+    load_state: str = ""  # "loaded" | "not-found" | "masked" | ...
 
 
 def get_unit_show(unit: str, runner=run) -> UnitState:
     props = [
         "ActiveState", "SubState", "Result", "ExecMainStatus", "ExecMainCode",
-        "NRestarts", "UnitFileState",
+        "NRestarts", "UnitFileState", "LoadState",
     ]
     out = runner(["systemctl", "show", unit, f"--property={','.join(props)}"])
     values = {}
@@ -121,6 +127,7 @@ def get_unit_show(unit: str, runner=run) -> UnitState:
         exec_main_code=values.get("ExecMainCode", ""),
         n_restarts=_int("NRestarts"),
         unit_file_state=values.get("UnitFileState", ""),
+        load_state=values.get("LoadState", ""),
     )
 
 
@@ -182,6 +189,7 @@ class CrashLoopReport:
                 "exec_main_status": self.state.exec_main_status if self.state else None,
                 "exec_main_code": self.state.exec_main_code if self.state else None,
                 "n_restarts": self.state.n_restarts if self.state else None,
+                "load_state": self.state.load_state if self.state else None,
             } if self.state else None,
         }
 
@@ -208,6 +216,23 @@ def diagnose(state: UnitState, journal_text: str) -> CrashLoopReport:
             unit=state.name,
             cause=CAUSE_DIAGNOSTIC_FAILED,
             explanation=CAUSE_EXPLANATIONS[CAUSE_DIAGNOSTIC_FAILED],
+            evidence=_relevant_evidence(journal_text),
+            state=state,
+        )
+
+    if state.load_state in ("not-found", "masked"):
+        # `systemctl show <typo'd-or-uninstalled-unit>` does NOT fail or
+        # produce empty output -- it happily returns ActiveState=inactive,
+        # SubState=dead, Result="" for a unit that was never loaded at all.
+        # Without this check that flows straight into the "not failed, few
+        # restarts" branch below and gets reported as CAUSE_CLEAN_NOT_CRASHING
+        # ("not currently in a crash-loop state") -- false reassurance about
+        # a unit systemd never even loaded, exactly the silent-wrong-answer
+        # failure mode this tool exists to prevent.
+        return CrashLoopReport(
+            unit=state.name,
+            cause=CAUSE_UNIT_NOT_FOUND,
+            explanation=CAUSE_EXPLANATIONS[CAUSE_UNIT_NOT_FOUND],
             evidence=_relevant_evidence(journal_text),
             state=state,
         )
