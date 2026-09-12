@@ -1,6 +1,7 @@
 from systemd_crashloop.core import (
     CAUSE_CLEAN_NOT_CRASHING,
     CAUSE_CONFIG_ERROR,
+    CAUSE_DIAGNOSTIC_FAILED,
     CAUSE_MISSING_DEPENDENCY,
     CAUSE_NONZERO_EXIT,
     CAUSE_OOM_KILLED,
@@ -68,6 +69,29 @@ def test_diagnose_uses_journal_classification_first():
     report = diagnose(state, journal)
     assert report.cause == CAUSE_OOM_KILLED
     assert report.evidence
+
+
+def test_diagnose_reports_diagnostic_failed_when_systemctl_show_returns_nothing():
+    """If systemctl show produced no properties at all (systemctl missing, D-Bus
+    down, permission denied), get_unit_show returns an all-empty/None UnitState.
+    diagnose() must NOT interpret that as a healthy 'not crashing' unit -- it is
+    an undetermined/failed diagnosis, not a confirmed all-clear."""
+    state = UnitState(name="myapp.service")  # all defaults: "" / None
+    report = diagnose(state, "")
+    assert report.cause == CAUSE_DIAGNOSTIC_FAILED
+    assert report.cause != CAUSE_CLEAN_NOT_CRASHING
+
+
+def test_diagnose_unit_via_get_unit_show_with_empty_runner_output():
+    """End-to-end: a runner that returns empty stdout (systemctl unavailable)
+    must flow through get_unit_show -> diagnose as DIAGNOSTIC_FAILED, not
+    silently as 'not crashing'."""
+    def empty_runner(cmd):
+        return ""
+
+    state = get_unit_show("myapp.service", runner=empty_runner)
+    report = diagnose(state, get_recent_journal("myapp.service", runner=empty_runner))
+    assert report.cause == CAUSE_DIAGNOSTIC_FAILED
 
 
 def test_diagnose_falls_back_to_result_oom_kill():

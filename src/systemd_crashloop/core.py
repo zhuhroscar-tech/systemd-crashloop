@@ -41,6 +41,7 @@ CAUSE_CONFIG_ERROR = "config_error"
 CAUSE_NONZERO_EXIT = "nonzero_exit"
 CAUSE_CLEAN_NOT_CRASHING = "not_crashing"
 CAUSE_UNKNOWN = "unknown"
+CAUSE_DIAGNOSTIC_FAILED = "diagnostic_failed"
 
 # Human-readable one-line explanations per cause code.
 CAUSE_EXPLANATIONS = {
@@ -63,6 +64,11 @@ CAUSE_EXPLANATIONS = {
     CAUSE_CLEAN_NOT_CRASHING: "This service is not currently in a crash-loop state.",
     CAUSE_UNKNOWN: "Could not confidently classify the failure from available "
                    "evidence -- review the log excerpt manually.",
+    CAUSE_DIAGNOSTIC_FAILED: "Could not query this unit's state at all (systemctl "
+                              "produced no properties -- systemctl may be missing, "
+                              "the D-Bus/systemd connection may be unavailable, or "
+                              "permission was denied). This is NOT a confirmed "
+                              "healthy/not-crashing result.",
 }
 
 
@@ -188,6 +194,24 @@ def _relevant_evidence(journal_text: str, max_lines: int = 8) -> list:
 
 def diagnose(state: UnitState, journal_text: str) -> CrashLoopReport:
     """Classify a unit's crash-loop cause from its current state + journal."""
+    state_is_empty = (
+        state.active_state == ""
+        and state.sub_state == ""
+        and state.result == ""
+        and state.exec_main_code == ""
+        and state.exec_main_status is None
+        and state.n_restarts is None
+        and state.unit_file_state == ""
+    )
+    if state_is_empty:
+        return CrashLoopReport(
+            unit=state.name,
+            cause=CAUSE_DIAGNOSTIC_FAILED,
+            explanation=CAUSE_EXPLANATIONS[CAUSE_DIAGNOSTIC_FAILED],
+            evidence=_relevant_evidence(journal_text),
+            state=state,
+        )
+
     is_failed_state = state.active_state == "failed" or state.result not in ("", "success")
     is_restarting_a_lot = (state.n_restarts or 0) >= 3
 
