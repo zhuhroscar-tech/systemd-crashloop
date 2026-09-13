@@ -65,8 +65,8 @@ jobs:
       - name: Build a standalone .pyz (zipapp)
         run: |
           python -m pip install . --target build/pyz_root
+          printf 'from systemd_crashloop.cli import main\nif __name__ == "__main__":\n    raise SystemExit(main())\n' > build/pyz_root/__main__.py
           python -m zipapp build/pyz_root \
-            --main "systemd_crashloop.cli:main" \
             --output dist/systemd-crashloop.pyz \
             --python "/usr/bin/env python3"
       - name: Smoke-test the .pyz on this Linux runner
@@ -74,6 +74,17 @@ jobs:
           python3 dist/systemd-crashloop.pyz --version
           python3 dist/systemd-crashloop.pyz --json > /tmp/scl.json || true
           python3 -m json.tool < /tmp/scl.json > /dev/null
+          # Regression check: the .pyz's exit code must reflect the real
+          # command result, not always be 0 (zipapp's --main template
+          # omits sys.exit(), which previously made every .pyz invocation
+          # report success regardless of actual findings/errors). Diagnosing
+          # a definitely-nonexistent unit name is a deterministic nonzero
+          # (unit-not-found -> exit 3) case.
+          set +e
+          python3 dist/systemd-crashloop.pyz definitely-nonexistent-unit-xyz.service > /dev/null 2>&1
+          bogus_code=$?
+          set -e
+          test "$bogus_code" -eq 3
       - name: Generate checksums
         run: |
           cd dist
