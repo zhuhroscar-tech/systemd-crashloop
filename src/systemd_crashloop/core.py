@@ -79,11 +79,23 @@ CAUSE_EXPLANATIONS = {
 
 def run(cmd: list, timeout: int = 15) -> str:
     """Run a read-only subprocess command, returning stdout (empty on error)."""
+    return _run_checked(cmd, timeout=timeout)[0]
+
+
+def _run_checked(cmd: list, timeout: int = 15) -> tuple:
+    """Run a read-only subprocess command, returning (stdout, ok).
+
+    ``ok`` is False when the command could not be run at all (binary
+    missing, timeout) or exited non-zero -- i.e. whenever empty stdout does
+    NOT reliably mean "ran fine, nothing to report", only "we could not
+    check". Callers that need to distinguish those two cases (like
+    `list_failed_units`) must use this instead of plain `run`.
+    """
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
-        return result.stdout or ""
+        return (result.stdout or "", result.returncode == 0)
     except (OSError, subprocess.SubprocessError):
-        return ""
+        return ("", False)
 
 
 @dataclass
@@ -280,12 +292,24 @@ def diagnose_unit(unit: str, journal_lines: int = 200, runner=run) -> CrashLoopR
     return diagnose(state, journal_text)
 
 
-def list_failed_units(runner=run) -> list:
-    """Return the names of all units currently in the 'failed' state."""
-    out = runner(["systemctl", "list-units", "--state=failed", "--no-legend", "--plain", "--no-pager"])
+def list_failed_units(runner=_run_checked) -> tuple:
+    """Return (names, ok) -- the names of all units currently in the
+    'failed' state, plus whether `systemctl list-units` itself succeeded.
+
+    ``ok`` is False when the command could not be run at all (missing
+    systemctl binary, no D-Bus/systemd connection, permission denied) or
+    exited non-zero. In that case an empty ``names`` list means "we could
+    not enumerate failed units at all", not "there are none currently
+    failed" -- collapsing those two into the same empty list would let a
+    caller running with insufficient permissions (or against a
+    misconfigured D-Bus) report a false "no failed units" clean bill of
+    health, exactly the silent-wrong-answer failure mode this tool exists
+    to prevent for individual units.
+    """
+    out, ok = runner(["systemctl", "list-units", "--state=failed", "--no-legend", "--plain", "--no-pager"])
     names = []
     for line in out.splitlines():
         parts = line.split()
         if parts:
             names.append(parts[0])
-    return names
+    return names, ok

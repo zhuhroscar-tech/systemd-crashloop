@@ -49,7 +49,7 @@ def test_diagnose_json_output(monkeypatch, capsys):
 
 
 def test_no_units_uses_list_failed_units(monkeypatch, capsys):
-    monkeypatch.setattr("systemd_crashloop.cli.list_failed_units", lambda: ["a.service", "b.service"])
+    monkeypatch.setattr("systemd_crashloop.cli.list_failed_units", lambda: (["a.service", "b.service"], True))
     monkeypatch.setattr(
         "systemd_crashloop.cli.diagnose_unit",
         lambda unit, journal_lines: _fake_report(unit=unit),
@@ -61,11 +61,25 @@ def test_no_units_uses_list_failed_units(monkeypatch, capsys):
 
 
 def test_no_units_and_none_failed_returns_zero(monkeypatch, capsys):
-    monkeypatch.setattr("systemd_crashloop.cli.list_failed_units", lambda: [])
+    monkeypatch.setattr("systemd_crashloop.cli.list_failed_units", lambda: ([], True))
     rc = main([])
     out = capsys.readouterr().out
     assert "No failed units found" in out
     assert rc == 0
+
+
+def test_no_units_and_list_failed_units_fails_returns_three(monkeypatch, capsys):
+    """When `systemctl list-units --state=failed` itself cannot be run
+    (missing binary, no D-Bus, permission denied), the CLI must report a
+    diagnostic failure and exit 3 -- NOT the same 'No failed units found'
+    / exit 0 as a genuinely healthy host. Regression test for the
+    false-clean-bill-of-health bug fixed in list_failed_units()."""
+    monkeypatch.setattr("systemd_crashloop.cli.list_failed_units", lambda: ([], False))
+    rc = main([])
+    out = capsys.readouterr().out
+    assert "Could not enumerate failed units" in out
+    assert "No failed units found" not in out
+    assert rc == 3
 
 
 def test_not_crashing_returns_zero(monkeypatch, capsys):

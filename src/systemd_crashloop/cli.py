@@ -57,7 +57,12 @@ def _print_text(reports, style) -> None:
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
 
-    units = args.units or list_failed_units()
+    list_failed_ok = True
+    if args.units:
+        units = args.units
+    else:
+        units, list_failed_ok = list_failed_units()
+
     reports = [diagnose_unit(u, journal_lines=args.journal_lines) for u in units]
 
     if args.json:
@@ -65,11 +70,20 @@ def main(argv=None) -> int:
     else:
         style = resolve_style(no_color_flag=args.no_color)
         if not reports:
-            print(status_headline(style, "ok", "No failed units found and none were specified."))
+            if list_failed_ok:
+                print(status_headline(style, "ok", "No failed units found and none were specified."))
+            else:
+                print(status_headline(
+                    style, "warn",
+                    "Could not enumerate failed units (`systemctl list-units` failed -- "
+                    "missing binary, no systemd/D-Bus connection, or permission denied). "
+                    "This is NOT a confirmed all-clear: some units may actually be failed. "
+                    "Diagnose a specific unit directly, or re-run with sufficient permissions.",
+                ))
         _print_text(reports, style)
 
     if not reports:
-        return 0
+        return 0 if list_failed_ok else 3
     if any(r.cause == CAUSE_DIAGNOSTIC_FAILED for r in reports):
         return 3
     if any(r.cause == CAUSE_UNIT_NOT_FOUND for r in reports):

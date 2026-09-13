@@ -277,17 +277,35 @@ def test_list_failed_units_parses_names():
     sample = "myapp.service loaded failed failed My App\nother.service loaded failed failed Other\n"
 
     def fake_runner(cmd, timeout=15):
-        return sample
+        return sample, True
 
-    names = list_failed_units(runner=fake_runner)
+    names, ok = list_failed_units(runner=fake_runner)
     assert names == ["myapp.service", "other.service"]
+    assert ok is True
 
 
 def test_list_failed_units_empty_when_no_output():
     def fake_runner(cmd, timeout=15):
-        return ""
+        return "", True
 
-    assert list_failed_units(runner=fake_runner) == []
+    names, ok = list_failed_units(runner=fake_runner)
+    assert names == []
+    assert ok is True
+
+
+def test_list_failed_units_reports_not_ok_on_command_failure():
+    """A failed/erroring `systemctl list-units` (missing binary, no D-Bus,
+    permission denied) must surface ok=False, not be indistinguishable from
+    a genuine empty result -- this is the exact false-clean-bill-of-health
+    bug class already fixed in usbsmart-doctor/nft-splitbrain/trim-doctor/
+    oom-postmortem, now closed here too."""
+
+    def fake_runner(cmd, timeout=15):
+        return "", False
+
+    names, ok = list_failed_units(runner=fake_runner)
+    assert names == []
+    assert ok is False
 
 
 def test_run_returns_empty_string_on_oserror(monkeypatch):
