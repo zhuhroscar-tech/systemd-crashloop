@@ -89,7 +89,7 @@ pip install systemd-crashloop
 Or run the standalone zipapp with no install:
 
 ```bash
-curl -LO https://github.com/zhuhroscar-tech/systemd-crashloop/releases/download/v0.1.0/systemd-crashloop.pyz
+curl -LO https://github.com/zhuhroscar-tech/systemd-crashloop/releases/latest/download/systemd-crashloop.pyz
 python3 systemd-crashloop.pyz --version
 ```
 
