@@ -108,7 +108,11 @@ systemd-crashloop --journal-lines 500  # inspect more journal history per unit
 
 Exit codes: `0` = no crash-looping units found (or all diagnosed units are
 healthy), `1` = at least one unit could not be confidently classified
-(`unknown`), `2` = at least one crash-looping unit was classified.
+(`unknown`), `2` = at least one crash-looping unit was classified, `3` =
+a diagnostic could not be completed at all (`systemctl`/`journalctl`
+failed, or the unit name doesn't exist on this system) — this is a
+tooling/lookup failure, not a classification, so treat it differently
+from `1`/`2` in scripts.
 
 ## If it finds a problem
 

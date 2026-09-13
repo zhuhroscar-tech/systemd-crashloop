@@ -1,7 +1,7 @@
 import json
 
 from systemd_crashloop.cli import main
-from systemd_crashloop.core import CrashLoopReport, UnitState, CAUSE_OOM_KILLED, CAUSE_CLEAN_NOT_CRASHING
+from systemd_crashloop.core import CrashLoopReport, UnitState, CAUSE_OOM_KILLED, CAUSE_CLEAN_NOT_CRASHING, CAUSE_UNKNOWN
 
 
 def _fake_report(cause=CAUSE_OOM_KILLED, unit="myapp.service"):
@@ -75,3 +75,40 @@ def test_not_crashing_returns_zero(monkeypatch, capsys):
     )
     rc = main(["myapp.service"])
     assert rc == 0
+
+
+def test_diagnostic_failed_returns_three(monkeypatch, capsys):
+    from systemd_crashloop.core import CAUSE_DIAGNOSTIC_FAILED
+
+    monkeypatch.setattr(
+        "systemd_crashloop.cli.diagnose_unit",
+        lambda unit, journal_lines: _fake_report(cause=CAUSE_DIAGNOSTIC_FAILED, unit=unit),
+    )
+    rc = main(["myapp.service"])
+    out = capsys.readouterr().out
+    assert "diagnostic_failed" in out
+    assert rc == 3
+
+
+def test_unit_not_found_returns_three(monkeypatch, capsys):
+    from systemd_crashloop.core import CAUSE_UNIT_NOT_FOUND
+
+    monkeypatch.setattr(
+        "systemd_crashloop.cli.diagnose_unit",
+        lambda unit, journal_lines: _fake_report(cause=CAUSE_UNIT_NOT_FOUND, unit=unit),
+    )
+    rc = main(["ghost.service"])
+    out = capsys.readouterr().out
+    assert "unit_not_found" in out
+    assert rc == 3
+
+
+def test_unknown_cause_returns_one(monkeypatch, capsys):
+    monkeypatch.setattr(
+        "systemd_crashloop.cli.diagnose_unit",
+        lambda unit, journal_lines: _fake_report(cause=CAUSE_UNKNOWN, unit=unit),
+    )
+    rc = main(["myapp.service"])
+    out = capsys.readouterr().out
+    assert "unknown" in out
+    assert rc == 1

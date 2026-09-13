@@ -288,3 +288,34 @@ def test_list_failed_units_empty_when_no_output():
         return ""
 
     assert list_failed_units(runner=fake_runner) == []
+
+
+def test_run_returns_empty_string_on_oserror(monkeypatch):
+    """core.run() must swallow OSError from a missing/broken systemctl binary
+    (e.g. PATH misconfiguration) and degrade to empty output rather than
+    crashing the whole diagnostic -- this is what upstream callers rely on to
+    reach CAUSE_DIAGNOSTIC_FAILED instead of propagating an exception."""
+    import subprocess as sp
+
+    from systemd_crashloop.core import run
+
+    def fake_run(*args, **kwargs):
+        raise OSError("systemctl: command not found")
+
+    monkeypatch.setattr(sp, "run", fake_run)
+    assert run(["systemctl", "show", "myapp.service"]) == ""
+
+
+def test_run_returns_empty_string_on_timeout(monkeypatch):
+    """Same guarantee, but for a hung systemctl/journalctl call exceeding the
+    timeout: subprocess.TimeoutExpired is a SubprocessError subclass and must
+    also degrade to empty output, not propagate."""
+    import subprocess as sp
+
+    from systemd_crashloop.core import run
+
+    def fake_run(*args, **kwargs):
+        raise sp.TimeoutExpired(cmd=["journalctl"], timeout=15)
+
+    monkeypatch.setattr(sp, "run", fake_run)
+    assert run(["journalctl", "-u", "myapp.service"]) == ""
