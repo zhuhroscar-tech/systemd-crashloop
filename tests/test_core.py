@@ -337,3 +337,47 @@ def test_run_returns_empty_string_on_timeout(monkeypatch):
 
     monkeypatch.setattr(sp, "run", fake_run)
     assert run(["journalctl", "-u", "myapp.service"]) == ""
+
+
+def test_run_checked_reports_ok_true_on_successful_exit(monkeypatch):
+    """The success path of _run_checked (subprocess actually runs and exits
+    0) was never exercised by any prior test -- every existing test either
+    raised an exception or bypassed _run_checked entirely via a fake
+    runner. This is exactly the ok=True side of the ActiveState/ok mapping
+    that list_failed_units and get_unit_show rely on to distinguish "ran
+    fine" from "could not check" -- if returncode==0 were ever compared
+    wrong (e.g. inverted, or compared against the wrong attribute), this
+    line alone would silently convert every healthy systemctl call into a
+    false CAUSE_DIAGNOSTIC_FAILED / ok=False report, with no test catching
+    it."""
+    import subprocess as sp
+
+    from systemd_crashloop.core import _run_checked
+
+    def fake_run(*args, **kwargs):
+        return sp.CompletedProcess(args=args[0] if args else [], returncode=0, stdout="ActiveState=active\n")
+
+    monkeypatch.setattr(sp, "run", fake_run)
+    out, ok = _run_checked(["systemctl", "show", "myapp.service"])
+    assert out == "ActiveState=active\n"
+    assert ok is True
+
+
+def test_run_checked_reports_ok_false_on_nonzero_exit_without_exception(monkeypatch):
+    """Mirror case: the subprocess runs to completion (no OSError/timeout)
+    but exits non-zero -- e.g. `systemctl list-units` refused by a
+    misconfigured D-Bus policy, which returns a non-zero exit and empty
+    stdout rather than raising. This must also surface ok=False so callers
+    don't mistake a refused/failed command for a genuinely empty, healthy
+    result."""
+    import subprocess as sp
+
+    from systemd_crashloop.core import _run_checked
+
+    def fake_run(*args, **kwargs):
+        return sp.CompletedProcess(args=args[0] if args else [], returncode=1, stdout="")
+
+    monkeypatch.setattr(sp, "run", fake_run)
+    out, ok = _run_checked(["systemctl", "list-units", "--state=failed"])
+    assert out == ""
+    assert ok is False
