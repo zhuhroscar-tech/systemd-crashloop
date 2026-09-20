@@ -215,6 +215,47 @@ def test_diagnose_unit_integration_wires_runner_through(monkeypatch):
     assert "50" in journal_cmd
 
 
+def test_diagnose_trusts_authoritative_result_over_stale_journal_text():
+    """The journal window (`-n 200` by default) commonly spans MULTIPLE
+    restart cycles of a crash-looping unit. Before this fix,
+    classify_from_journal()'s fixed-priority text scan ran FIRST and could
+    match a stale line from an EARLIER, unrelated cycle (here: an OOM kill
+    two restarts ago) even though systemd's own Result property for the
+    CURRENT cycle names a different, unambiguous cause
+    (start-limit-hit) -- silently reporting the wrong cause. Verified by
+    reproducing against the pre-fix code: it returned 'oom_killed' here,
+    not 'start_limit_hit'. Result is authoritative for the current cycle
+    and must win over heuristic journal-text matching."""
+    state = _state(
+        active_state="failed", sub_state="failed", result="start-limit-hit",
+        exec_main_status=None, exec_main_code="", n_restarts=6,
+    )
+    journal = (
+        "Sep 10 07:00:00 host kernel: myapp invoked oom-killer\n"
+        "Sep 10 07:00:00 host kernel: Out of memory: Killed process 1000 (myapp)\n"
+        "Sep 10 07:00:05 host systemd[1]: myapp.service: Scheduled restart job.\n"
+        "Sep 10 07:00:10 host myapp[1001]: starting up\n"
+        "Sep 10 07:00:20 host myapp[1001]: exiting immediately, crash loop\n"
+        "Sep 10 07:05:00 host systemd[1]: myapp.service: Start request repeated too quickly.\n"
+        "Sep 10 07:05:00 host systemd[1]: myapp.service: Failed with result 'start-limit-hit'.\n"
+    )
+    report = diagnose(state, journal)
+    assert report.cause == CAUSE_START_LIMIT_HIT
+    assert report.cause != CAUSE_OOM_KILLED
+
+
+def test_diagnose_still_uses_journal_when_result_is_generic():
+    """Sanity check the fix doesn't over-trust Result: a generic/ambiguous
+    Result value (e.g. exit-code, which covers many distinct application
+    failures) must still fall through to journal-text classification when
+    it matches a specific pattern -- Result-first only short-circuits for
+    the three unambiguous values (oom-kill, start-limit-hit, timeout)."""
+    state = _state(result="exit-code", exec_main_code="exited", exec_main_status=1)
+    journal = "kernel: Out of memory: Killed process 999 (myapp)"
+    report = diagnose(state, journal)
+    assert report.cause == CAUSE_OOM_KILLED
+
+
 def test_diagnose_treats_high_restart_count_as_crash_loop_even_if_not_failed():
     state = _state(active_state="activating", sub_state="auto-restart", result="", n_restarts=10)
     journal = "systemd[1]: myapp.service: Start request repeated too quickly."

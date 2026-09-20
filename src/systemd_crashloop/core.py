@@ -261,16 +261,30 @@ def diagnose(state: UnitState, journal_text: str) -> CrashLoopReport:
             state=state,
         )
 
-    cause = classify_from_journal(journal_text)
+    # Authoritative-first: systemd's own Result property reflects ONLY the
+    # current failure cycle. The journal window passed in (`-n N` lines,
+    # default 200) commonly spans MULTIPLE prior restart cycles for a
+    # crash-looping unit, so classify_from_journal()'s fixed-priority text
+    # scan can match a stale line from an earlier, unrelated cycle (e.g. an
+    # OOM kill two restarts ago) even though systemd's Result for the
+    # CURRENT cycle names a different, unambiguous cause (e.g.
+    # start-limit-hit). When Result names one of these specific causes,
+    # trust it before falling back to heuristic journal-text matching --
+    # this is the same "silent wrong answer" failure mode already fixed
+    # for LoadState=not-found/masked above, just for the cause code itself.
+    cause = None
+    if state.result == "oom-kill":
+        cause = CAUSE_OOM_KILLED
+    elif state.result == "start-limit-hit":
+        cause = CAUSE_START_LIMIT_HIT
+    elif state.result == "timeout":
+        cause = CAUSE_TIMEOUT
 
     if cause is None:
-        if state.result == "oom-kill":
-            cause = CAUSE_OOM_KILLED
-        elif state.result == "start-limit-hit":
-            cause = CAUSE_START_LIMIT_HIT
-        elif state.result == "timeout":
-            cause = CAUSE_TIMEOUT
-        elif state.exec_main_code == "killed":
+        cause = classify_from_journal(journal_text)
+
+    if cause is None:
+        if state.exec_main_code == "killed":
             cause = CAUSE_NONZERO_EXIT
         elif state.exec_main_code == "exited" and (state.exec_main_status or 0) != 0:
             cause = CAUSE_NONZERO_EXIT
