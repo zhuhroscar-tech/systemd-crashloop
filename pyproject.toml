@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "systemd-crashloop"
-version = "0.1.8"
+version = "0.1.9"
 description = "Classify why a systemd service is crash-looping (OOM killed, start-limit-hit, missing dependency, timeout, config error, or plain nonzero exit)."
 readme = "README.md"
 license = "MIT"

@@ -22,7 +22,13 @@ systemd-crashloop a.service b.service --journal-lines 500
 systemd-crashloop --json
 ```
 
-独立 `.pyz` 可在 [Releases](https://github.com/zhuhroscar-tech/systemd-crashloop/releases) 下载，执行前请核对对应版本的校验和。
+独立 `.pyz` 可在 [Releases](https://github.com/zhuhroscar-tech/systemd-crashloop/releases) 下载，执行前请核对对应版本的校验和：
+
+```bash
+python3 dist/systemd-crashloop.pyz --version
+```
+
+版本历史记录在 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 如何理解结果
 

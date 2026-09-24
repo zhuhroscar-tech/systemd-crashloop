@@ -22,7 +22,13 @@ systemd-crashloop a.service b.service --journal-lines 500
 systemd-crashloop --json
 ```
 
-For standalone `.pyz` downloads, see [Releases](https://github.com/zhuhroscar-tech/systemd-crashloop/releases) and verify the matching release checksums before execution.
+For standalone `.pyz` downloads, see [Releases](https://github.com/zhuhroscar-tech/systemd-crashloop/releases) and verify the matching release checksums before execution:
+
+```bash
+python3 dist/systemd-crashloop.pyz --version
+```
+
+Release history is tracked in [CHANGELOG.md](CHANGELOG.md).
 
 ## Read the result
 
