@@ -5,7 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 PROJECT = "systemd-crashloop"
-CURRENT_VERSION = "0.1.9"
+CURRENT_VERSION = "0.1.10"
 
 
 def _read(path: str) -> str:
@@ -50,8 +50,8 @@ def test_readmes_link_license_release_history_and_downloads():
 def test_changelog_contains_current_release_entry():
     changelog = _read("CHANGELOG.md")
     assert f"## v{CURRENT_VERSION}" in changelog
-    assert "repository-contract tests" in changelog
-    assert "v0.1.8" in changelog
+    assert "release-tag CI coverage" in changelog
+    assert "v0.1.9" in changelog
 
 
 def test_ci_runs_tests_builds_artifacts_and_checks_pyz_exit_codes():
@@ -61,6 +61,18 @@ def test_ci_runs_tests_builds_artifacts_and_checks_pyz_exit_codes():
     assert f"dist/{PROJECT}.pyz" in ci
     assert "test \"$bogus_code\" -eq 3" in ci
     assert "actions/upload-artifact@v4" in ci
+    assert 'tags: ["v*"]' in ci
+
+
+def test_package_metadata_links_project_resources():
+    pyproject = _read("pyproject.toml")
+    assert "[project.urls]" in pyproject
+    assert f'Homepage = "https://github.com/zhuhroscar-tech/{PROJECT}"' in pyproject
+    assert f'Issues = "https://github.com/zhuhroscar-tech/{PROJECT}/issues"' in pyproject
+    assert (
+        f'Changelog = "https://github.com/zhuhroscar-tech/{PROJECT}/blob/main/CHANGELOG.md"'
+        in pyproject
+    )
 
 
 def test_codeql_workflow_analyzes_python_on_push_and_schedule():

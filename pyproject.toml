@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "systemd-crashloop"
-version = "0.1.9"
+version = "0.1.10"
 description = "Classify why a systemd service is crash-looping (OOM killed, start-limit-hit, missing dependency, timeout, config error, or plain nonzero exit)."
 readme = "README.md"
 license = "MIT"
@@ -15,6 +15,11 @@ classifiers = [
   "Programming Language :: Python :: 3",
   "Operating System :: POSIX :: Linux",
 ]
+
+[project.urls]
+Homepage = "https://github.com/zhuhroscar-tech/systemd-crashloop"
+Issues = "https://github.com/zhuhroscar-tech/systemd-crashloop/issues"
+Changelog = "https://github.com/zhuhroscar-tech/systemd-crashloop/blob/main/CHANGELOG.md"
 
 [project.scripts]
 systemd-crashloop = "systemd_crashloop.cli:main"

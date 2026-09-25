@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.10 — 2026-09-25
+
+- Made release-tag CI coverage explicit for `v*` tags.
+- Added package project URLs for the homepage, issue tracker, and changelog.
+- Added repository-contract coverage for release-tag validation and package resource metadata.
+
 ## v0.1.9 — 2026-09-24
 
 - Added this changelog so users can see release history without opening GitHub releases.
